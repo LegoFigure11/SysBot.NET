@@ -18,6 +18,8 @@ namespace SysBot.Base
             return Encoder.GetBytes(command);
         }
 
+        public static byte[] Touch(int x, int y, int holdTime, bool crlf = true) => Encode($"touchHold {x} {y} {holdTime}", crlf);
+
         /// <summary>
         /// Removes the virtual controller from the bot. Allows physical controllers to control manually.
         /// </summary>
