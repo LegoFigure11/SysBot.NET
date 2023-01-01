@@ -65,6 +65,7 @@ namespace SysBot.Pokemon
                         TID = TID,
                         SID = SID,
                         OT = OT,
+                        Generation = i,
                     };
                     var exist = TrainerSettings.GetSavedTrainerData(v, i, fallback);
                     if (exist is SimpleTrainerInfo) // not anything from files; this assumes ALM returns SimpleTrainerInfo for non-user-provided fake templates.
@@ -112,6 +113,8 @@ namespace SysBot.Pokemon
                 return TrainerSettings.GetSavedTrainerData(GameVersion.BDSP, 8);
             if (typeof(T) == typeof(PA8))
                 return TrainerSettings.GetSavedTrainerData(GameVersion.PLA, 8);
+            if (typeof(T) == typeof(PK9))
+                return TrainerSettings.GetSavedTrainerData(GameVersion.SV, 9);
 
             throw new ArgumentException("Type does not have a recognized trainer fetch.", typeof(T).Name);
         }

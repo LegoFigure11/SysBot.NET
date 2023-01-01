@@ -270,7 +270,7 @@ namespace SysBot.Pokemon
             }
             Log("Found a user talking to us!");
 
-            // Keep pressing A until TargetTranerParam is loaded (when we hit the box).
+            // Keep pressing A until TargetTranerParam (sic) is loaded (when we hit the box).
             while (!await IsPartnerParamLoaded(token).ConfigureAwait(false) && waitPartner > 0)
             {
                 for (int i = 0; i < 2; ++i)
@@ -313,7 +313,7 @@ namespace SysBot.Pokemon
                 return PokeTradeResult.SuspiciousActivity;
             }
 
-            await Task.Delay(2_000, token).ConfigureAwait(false);
+            await Task.Delay(2_000 + Hub.Config.Timings.ExtraTimeOpenBox, token).ConfigureAwait(false);
 
             // Confirm Box 1 Slot 1
             if (poke.Type == PokeTradeType.Specific)
@@ -370,10 +370,6 @@ namespace SysBot.Pokemon
             // Only log if we completed the trade.
             UpdateCountsAndExport(poke, received, toSend);
 
-            // Still need to wait out the trade animation.
-            for (var i = 0; i < 30; i++)
-                await Click(A, 0_500, token).ConfigureAwait(false);
-
             // Try to get out of the box.
             if (!await ExitBoxToUnionRoom(token).ConfigureAwait(false))
                 return PokeTradeResult.RecoverReturnOverworld;
@@ -395,7 +391,7 @@ namespace SysBot.Pokemon
         private static ulong GetFakeNID(string trainerName, uint trainerID)
         {
             var nameHash = trainerName.GetHashCode();
-            return (ulong)(trainerID << 32) + (uint)nameHash;
+            return ((ulong)trainerID << 32) | (uint)nameHash;
         }
 
         private void UpdateCountsAndExport(PokeTradeDetail<PB8> poke, PB8 received, PB8 toSend)
@@ -421,34 +417,22 @@ namespace SysBot.Pokemon
             var oldEC = await SwitchConnection.ReadBytesAbsoluteAsync(BoxStartOffset, 8, token).ConfigureAwait(false);
 
             await Click(A, 3_000, token).ConfigureAwait(false);
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < Hub.Config.Trade.MaxTradeConfirmTime; i++)
             {
                 if (await IsUserBeingShifty(detail, token).ConfigureAwait(false))
                     return PokeTradeResult.SuspiciousActivity;
                 // We're no longer talking, so they probably quit on us.
                 if (!await IsUnionWork(UnionTalkingOffset, token).ConfigureAwait(false))
                     return PokeTradeResult.TrainerTooSlow;
-                await Click(A, 1_500, token).ConfigureAwait(false);
-            }
-
-            var tradeCounter = 0;
-            while (await IsUnionWork(UnionTalkingOffset, token).ConfigureAwait(false))
-            {
                 await Click(A, 1_000, token).ConfigureAwait(false);
-                tradeCounter++;
 
+                // EC is detectable at the start of the animation.
                 var newEC = await SwitchConnection.ReadBytesAbsoluteAsync(BoxStartOffset, 8, token).ConfigureAwait(false);
                 if (!newEC.SequenceEqual(oldEC))
                 {
-                    await Task.Delay(5_000, token).ConfigureAwait(false);
+                    await Task.Delay(25_000, token).ConfigureAwait(false);
                     return PokeTradeResult.Success;
                 }
-
-                // We've somehow failed out of the Union Room -- can happen with connection error.
-                if (!await IsUnionWork(UnionGamingOffset, token).ConfigureAwait(false))
-                    return PokeTradeResult.TrainerTooSlow;
-                if (tradeCounter >= Hub.Config.Trade.TradeAnimationMaxDelaySeconds)
-                    break;
             }
 
             // If we don't detect a B1S1 change, the trade didn't go through in that time.
@@ -653,8 +637,15 @@ namespace SysBot.Pokemon
             var time = TimeSpan.FromSeconds(Hub.Config.Trade.MaxDumpTradeTime);
             var start = DateTime.Now;
 
+            var bctr = 0;
             while (ctr < Hub.Config.Trade.MaxDumpsPerTrade && DateTime.Now - start < time)
             {
+                // We're no longer talking, so they probably quit on us.
+                if (!await IsUnionWork(UnionTalkingOffset, token).ConfigureAwait(false))
+                    break;
+                if (bctr++ % 3 == 0)
+                    await Click(B, 0_100, token).ConfigureAwait(false);
+
                 // Wait for user input... Needs to be different from the previously offered Pokémon.
                 var tradeOffered = await ReadUntilChanged(LinkTradePokemonOffset, lastOffered, 3_000, 1_000, false, true, token).ConfigureAwait(false);
                 if (!tradeOffered)
@@ -675,11 +666,14 @@ namespace SysBot.Pokemon
                 }
 
                 var la = new LegalityAnalysis(pk);
-                var verbose = la.Report(true);
+                var verbose = $"```{la.Report(true)}```";
                 Log($"Shown Pokémon is: {(la.Valid ? "Valid" : "Invalid")}.");
 
                 ctr++;
                 var msg = Hub.Config.Trade.DumpTradeLegalityCheck ? verbose : $"File {ctr}";
+                // Extra information for shiny eggs, because of people dumping to skip hatching.
+                var eggstring = pk.IsEgg ? "Egg " : string.Empty;
+                msg += pk.IsShiny ? $"\n**This Pokémon {eggstring}is shiny!**" : string.Empty;
                 detail.SendNotification(this, pk, msg);
             }
 

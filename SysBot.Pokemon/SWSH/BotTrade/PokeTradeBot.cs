@@ -1,4 +1,5 @@
-﻿using PKHeX.Core;
+﻿using System.Linq;
+using PKHeX.Core;
 using PKHeX.Core.Searching;
 using SysBot.Base;
 using System;
@@ -307,7 +308,7 @@ namespace SysBot.Pokemon
 
             // Select Pokemon
             // pkm already injected to b1s1
-            await Task.Delay(5_500, token).ConfigureAwait(false); // necessary delay to get to the box properly
+            await Task.Delay(5_500 + Hub.Config.Timings.ExtraTimeOpenBox, token).ConfigureAwait(false); // necessary delay to get to the box properly
 
             var trainerName = await GetTradePartnerName(TradeMethod.LinkTrade, token).ConfigureAwait(false);
             var trainerTID = await GetTradePartnerTID7(TradeMethod.LinkTrade, token).ConfigureAwait(false);
@@ -366,10 +367,16 @@ namespace SysBot.Pokemon
 
             var tradeResult = await ConfirmAndStartTrading(poke, token).ConfigureAwait(false);
             if (tradeResult != PokeTradeResult.Success)
+            {
+                await ExitTrade(Hub.Config, false, token).ConfigureAwait(false);
                 return tradeResult;
+            }
 
             if (token.IsCancellationRequested)
+            {
+                await ExitTrade(Hub.Config, false, token).ConfigureAwait(false);
                 return PokeTradeResult.RoutineCancel;
+            }
 
             // Trade was Successful!
             var received = await ReadBoxPokemon(InjectBox, InjectSlot, token).ConfigureAwait(false);
@@ -378,6 +385,7 @@ namespace SysBot.Pokemon
             {
                 Log("User did not complete the trade.");
                 RecordUtil<PokeTradeBot>.Record($"Cancelled\t{trainerNID:X16}\t{trainerName}\t{poke.Trainer.TrainerName}\\t{poke.ID}\t{toSend.EncryptionConstant:X8}\t{offered.EncryptionConstant:X8}");
+                await ExitTrade(Hub.Config, false, token).ConfigureAwait(false);
                 return PokeTradeResult.TrainerTooSlow;
             }
 
@@ -389,6 +397,7 @@ namespace SysBot.Pokemon
 
             // Only log if we completed the trade.
             UpdateCountsAndExport(poke, received, toSend);
+            await ExitTrade(Hub.Config, false, token).ConfigureAwait(false);
             return PokeTradeResult.Success;
         }
 
@@ -536,29 +545,31 @@ namespace SysBot.Pokemon
 
         private async Task<PokeTradeResult> ConfirmAndStartTrading(PokeTradeDetail<PK8> detail, CancellationToken token)
         {
+            // We'll keep watching B1S1 for a change to indicate a trade started -> should try quitting at that point.
+            var oldEC = await Connection.ReadBytesAsync(BoxStartOffset, 8, token).ConfigureAwait(false);
+
             await Click(A, 3_000, token).ConfigureAwait(false);
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < Hub.Config.Trade.MaxTradeConfirmTime; i++)
             {
+                // If we are in a Trade Evolution/PokeDex Entry and the Trade Partner quits, we land on the Overworld
+                if (await IsOnOverworld(Hub.Config, token).ConfigureAwait(false))
+                    return PokeTradeResult.TrainerLeft;
                 if (await IsUserBeingShifty(detail, token).ConfigureAwait(false))
                     return PokeTradeResult.SuspiciousActivity;
-                await Click(A, 1_500, token).ConfigureAwait(false);
-            }
-
-            var delay_count = 0;
-            while (!await IsInBox(token).ConfigureAwait(false))
-            {
                 await Click(A, 1_000, token).ConfigureAwait(false);
-                delay_count++;
-                if (delay_count >= Hub.Config.Trade.TradeAnimationMaxDelaySeconds)
-                    break;
-                if (await IsOnOverworld(Hub.Config, token).ConfigureAwait(false)) // In case we are in a Trade Evolution/PokeDex Entry and the Trade Partner quits we land on the Overworld
-                    break;
+
+                // EC is detectable at the start of the animation.
+                var newEC = await Connection.ReadBytesAsync(BoxStartOffset, 8, token).ConfigureAwait(false);
+                if (!newEC.SequenceEqual(oldEC))
+                {
+                    await Task.Delay(25_000, token).ConfigureAwait(false);
+                    return PokeTradeResult.Success;
+                }
             }
 
-            await Task.Delay(1_000 + Util.Rand.Next(0_700, 1_000), token).ConfigureAwait(false);
+            if (await IsOnOverworld(Hub.Config, token).ConfigureAwait(false))
+                return PokeTradeResult.TrainerLeft;
 
-            await ExitTrade(Hub.Config, false, token).ConfigureAwait(false);
-            Log("Exited trade!");
             return PokeTradeResult.Success;
         }
 
@@ -580,7 +591,7 @@ namespace SysBot.Pokemon
             var la = new LegalityAnalysis(offered);
             if (!la.Valid)
             {
-                Log($"Clone request (from {poke.Trainer.TrainerName}) has detected an invalid Pokémon: {(Species)offered.Species}.");
+                Log($"Clone request (from {poke.Trainer.TrainerName}) has detected an invalid Pokémon: {GameInfo.GetStrings(1).Species[offered.Species]}.");
                 if (DumpSetting.Dump)
                     DumpPokemon(DumpSetting.DumpFolder, "hacked", offered);
 
@@ -592,17 +603,15 @@ namespace SysBot.Pokemon
                 return (offered, PokeTradeResult.IllegalTrade);
             }
 
-            // Inject the shown Pokémon.
             var clone = (PK8)offered.Clone();
             if (Hub.Config.Legality.ResetHOMETracker)
                 clone.Tracker = 0;
 
-            poke.SendNotification(this, $"**Cloned your {(Species)clone.Species}!**\nNow press B to cancel your offer and trade me a Pokémon you don't want.");
+            poke.SendNotification(this, $"**Cloned your {GameInfo.GetStrings(1).Species[clone.Species]}!**\nNow press B to cancel your offer and trade me a Pokémon you don't want.");
             Log($"Cloned a {(Species)clone.Species}. Waiting for user to change their Pokémon...");
 
             // Separate this out from WaitForPokemonChanged since we compare to old EC from original read.
-            var partnerFound = await ReadUntilChanged(LinkTradePartnerPokemonOffset, oldEC, 15_000, 0_200, false, token)
-                .ConfigureAwait(false);
+            var partnerFound = await ReadUntilChanged(LinkTradePartnerPokemonOffset, oldEC, 15_000, 0_200, false, token).ConfigureAwait(false);
 
             if (!partnerFound)
             {
@@ -704,11 +713,14 @@ namespace SysBot.Pokemon
                 }
 
                 var la = new LegalityAnalysis(pk);
-                var verbose = la.Report(true);
+                var verbose = $"```{la.Report(true)}```";
                 Log($"Shown Pokémon is: {(la.Valid ? "Valid" : "Invalid")}.");
 
                 ctr++;
                 var msg = Hub.Config.Trade.DumpTradeLegalityCheck ? verbose : $"File {ctr}";
+                // Extra information for shiny eggs, because of people dumping to skip hatching.
+                var eggstring = pk.IsEgg ? "Egg " : string.Empty;
+                msg += pk.IsShiny ? $"\n**This Pokémon {eggstring}is shiny!**" : string.Empty;
                 detail.SendNotification(this, pk, msg);
             }
 
