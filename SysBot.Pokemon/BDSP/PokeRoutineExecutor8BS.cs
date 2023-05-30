@@ -1,12 +1,12 @@
-﻿using System;
+﻿using PKHeX.Core;
+using SysBot.Base;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using PKHeX.Core;
-using SysBot.Base;
-using static SysBot.Pokemon.BasePokeDataOffsetsBS;
 using static SysBot.Base.SwitchButton;
+using static SysBot.Pokemon.BasePokeDataOffsetsBS;
 
 namespace SysBot.Pokemon
 {
@@ -62,7 +62,10 @@ namespace SysBot.Pokemon
 
         public async Task<SAV8BS> IdentifyTrainer(CancellationToken token)
         {
-            // pull title so we know which set of offsets to use
+            // Check if botbase is on the correct version or later.
+            await VerifyBotbaseVersion(token).ConfigureAwait(false);
+
+            // Pull title so we know which set of offsets to use.
             string title = await SwitchConnection.GetTitleID(token).ConfigureAwait(false);
             Offsets = title switch
             {
@@ -71,11 +74,20 @@ namespace SysBot.Pokemon
                 _ => throw new Exception($"{title} is not a valid Pokémon BDSP title. Is your mode correct?"),
             };
 
+            // Verify the game version.
+            var game_version = await SwitchConnection.GetGameInfo("version", token).ConfigureAwait(false);
+            if (!game_version.SequenceEqual(BSGameVersion))
+                throw new Exception($"Game version is not supported. Expected version {BSGameVersion}, and current game version is {game_version}.");
+
             var sav = await GetFakeTrainerSAV(token).ConfigureAwait(false);
             InitSaveData(sav);
 
             if (!IsValidTrainerData())
-                throw new Exception("Trainer data is not valid. Refer to the SysBot.NET wiki for bad or no trainer data.");
+            {
+                await CheckForRAMShiftingApps(token).ConfigureAwait(false);
+                throw new Exception("Refer to the SysBot.NET wiki (https://github.com/kwsch/SysBot.NET/wiki/Troubleshooting) for more information.");
+            }
+
             if (await GetTextSpeed(token).ConfigureAwait(false) < TextSpeedOption.Fast)
                 throw new Exception("Text speed should be set to FAST. Fix this for correct operation.");
 
@@ -92,9 +104,12 @@ namespace SysBot.Pokemon
             info.OT = TradePartnerBS.ReadStringFromRAMObject(name);
 
             // Set the TID, SID, and Language
-            var id = await SwitchConnection.PointerPeek(4, Offsets.MyStatusTIDPointer, token).ConfigureAwait(false);
-            info.TID = BitConverter.ToUInt16(id, 0);
-            info.SID = BitConverter.ToUInt16(id, 2);
+            var offset = await SwitchConnection.PointerAll(Offsets.MyStatusTIDPointer, token).ConfigureAwait(false);
+            var tid = await SwitchConnection.ReadBytesAbsoluteAsync(offset, 2, token).ConfigureAwait(false);
+            var sid = await SwitchConnection.ReadBytesAbsoluteAsync(offset + 2, 2, token).ConfigureAwait(false);
+
+            info.TID16 = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(tid);
+            info.SID16 = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(sid);
 
             var lang = await SwitchConnection.PointerPeek(1, Offsets.ConfigLanguagePointer, token).ConfigureAwait(false);
             sav.Language = lang[0];
@@ -116,13 +131,9 @@ namespace SysBot.Pokemon
             await Connection.SendAsync(SwitchCommand.Configure(SwitchConfigureParameter.pollRate, 50), token).ConfigureAwait(false);
         }
 
-        public async Task CleanExit(IBotStateSettings settings, CancellationToken token)
+        public async Task CleanExit(CancellationToken token)
         {
-            if (settings.ScreenOff)
-            {
-                Log("Turning on screen.");
-                await SetScreen(ScreenState.On, token).ConfigureAwait(false);
-            }
+            await SetScreen(ScreenState.On, token).ConfigureAwait(false);
             Log("Detaching controllers on routine exit.");
             await DetachController(token).ConfigureAwait(false);
         }

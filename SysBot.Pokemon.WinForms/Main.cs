@@ -1,15 +1,14 @@
-﻿using Newtonsoft.Json;
-using PKHeX.Core;
+﻿using PKHeX.Core;
 using SysBot.Base;
+using SysBot.Pokemon.Z3;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Newtonsoft.Json.Serialization;
-using SysBot.Pokemon.Z3;
 
 namespace SysBot.Pokemon.WinForms
 {
@@ -23,11 +22,11 @@ namespace SysBot.Pokemon.WinForms
         {
             InitializeComponent();
 
-            PokeTradeBot.SeedChecker = new Z3SeedSearchHandler<PK8>();
+            PokeTradeBotSWSH.SeedChecker = new Z3SeedSearchHandler<PK8>();
             if (File.Exists(Program.ConfigPath))
             {
                 var lines = File.ReadAllText(Program.ConfigPath);
-                Config = JsonConvert.DeserializeObject<ProgramConfig>(lines, GetSettings()) ?? new ProgramConfig();
+                Config = JsonSerializer.Deserialize(lines, ProgramConfigContext.Default.ProgramConfig) ?? new ProgramConfig();
                 RunningEnvironment = GetRunner(Config);
                 foreach (var bot in Config.Bots)
                 {
@@ -46,14 +45,13 @@ namespace SysBot.Pokemon.WinForms
             LoadControls();
             Text = $"{Text} ({Config.Mode})";
             Task.Run(BotMonitor);
-#if NETFRAMEWORK
+
             InitUtil.InitializeStubs(Config.Mode);
-#endif
         }
 
         private static IPokeBotRunner GetRunner(ProgramConfig cfg) => cfg.Mode switch
         {
-            ProgramMode.SWSH => new PokeBotRunnerImpl<PK8>(cfg.Hub, new BotFactory8()),
+            ProgramMode.SWSH => new PokeBotRunnerImpl<PK8>(cfg.Hub, new BotFactory8SWSH()),
             ProgramMode.BDSP => new PokeBotRunnerImpl<PB8>(cfg.Hub, new BotFactory8BS()),
             ProgramMode.LA => new PokeBotRunnerImpl<PA8>(cfg.Hub, new BotFactory8LA()),
             ProgramMode.SV => new PokeBotRunnerImpl<PK9>(cfg.Hub, new BotFactory9SV()),
@@ -157,28 +155,13 @@ namespace SysBot.Pokemon.WinForms
         private void SaveCurrentConfig()
         {
             var cfg = GetCurrentConfiguration();
-            var lines = JsonConvert.SerializeObject(cfg, GetSettings());
+            var lines = JsonSerializer.Serialize(cfg, ProgramConfigContext.Default.ProgramConfig);
             File.WriteAllText(Program.ConfigPath, lines);
         }
 
-        private static JsonSerializerSettings GetSettings() => new()
-        {
-            Formatting = Formatting.Indented,
-            DefaultValueHandling = DefaultValueHandling.Include,
-            NullValueHandling = NullValueHandling.Ignore,
-            ContractResolver = new SerializableExpandableContractResolver(),
-        };
-
-        // https://stackoverflow.com/a/36643545
-        private sealed class SerializableExpandableContractResolver : DefaultContractResolver
-        {
-            protected override JsonContract CreateContract(Type objectType)
-            {
-                if (TypeDescriptor.GetAttributes(objectType).Contains(new TypeConverterAttribute(typeof(ExpandableObjectConverter))))
-                    return CreateObjectContract(objectType);
-                return base.CreateContract(objectType);
-            }
-        }
+        [JsonSerializable(typeof(ProgramConfig))]
+        [JsonSourceGenerationOptions(WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+        public sealed partial class ProgramConfigContext : JsonSerializerContext { }
 
         private void B_Start_Click(object sender, EventArgs e)
         {
@@ -303,7 +286,7 @@ namespace SysBot.Pokemon.WinForms
             var cfg = BotConfigUtil.GetConfig<SwitchConnectionConfig>(ip, port);
             cfg.Protocol = (SwitchProtocol)WinFormsUtil.GetIndex(CB_Protocol);
 
-            var pk = new PokeBotState {Connection = cfg};
+            var pk = new PokeBotState { Connection = cfg };
             var type = (PokeRoutineType)WinFormsUtil.GetIndex(CB_Routine);
             pk.Initialize(type);
             return pk;

@@ -1,11 +1,11 @@
-﻿using System;
-using Discord;
+﻿using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using PKHeX.Core;
+using SysBot.Base;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
-using SysBot.Base;
 
 namespace SysBot.Pokemon.Discord
 {
@@ -66,7 +66,7 @@ namespace SysBot.Pokemon.Discord
                 pkm = EntityConverter.ConvertToType(pkm, typeof(T), out _) ?? pkm;
                 if (pkm is not T pk || !la.Valid)
                 {
-                    var reason = result == "Timeout" ? $"That {spec} set took too long to generate." : $"I wasn't able to create a {spec} from that set.";
+                    var reason = result == "Timeout" ? $"That {spec} set took too long to generate." : result == "VersionMismatch" ? "Request refused: PKHeX and Auto-Legality Mod version mismatch." : $"I wasn't able to create a {spec} from that set.";
                     var imsg = $"Oops! {reason}";
                     if (result == "Failed")
                         imsg += $"\n{AutoLegalityWrapper.GetLegalizationHint(template, sav, pkm)}";
@@ -126,7 +126,7 @@ namespace SysBot.Pokemon.Discord
         [Alias("tu", "tradeOther")]
         [Summary("Makes the bot trade the mentioned user the attached file.")]
         [RequireSudo]
-        public async Task TradeAsyncAttachUser([Summary("Trade Code")] int code, [Remainder]string _)
+        public async Task TradeAsyncAttachUser([Summary("Trade Code")] int code, [Remainder] string _)
         {
             if (Context.Message.MentionedUsers.Count > 1)
             {

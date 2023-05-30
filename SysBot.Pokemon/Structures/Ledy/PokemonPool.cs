@@ -140,7 +140,7 @@ namespace SysBot.Pokemon
         private static bool DisallowRandomRecipientTrade(T pk, IEncounterTemplate enc)
         {
             // Anti-spam
-            if (pk.IsNicknamed && enc is not EncounterTrade {IsNicknamed: true} && pk.Nickname.Length > 6)
+            if (pk.IsNicknamed && enc is not EncounterTrade { IsNicknamed: true } && pk.Nickname.Length > 6)
                 return true;
 
             // Anti-spam
@@ -154,7 +154,9 @@ namespace SysBot.Pokemon
         public static bool DisallowRandomRecipientTrade(T pk)
         {
             // Surprise Trade currently bans Mythicals and Legendaries, not Sub-Legendaries.
-            if (Legal.Legends.Contains(pk.Species))
+            if (SpeciesCategory.IsLegendary(pk.Species))
+                return true;
+            if (SpeciesCategory.IsMythical(pk.Species))
                 return true;
 
             // Can't surprise trade fused stuff.

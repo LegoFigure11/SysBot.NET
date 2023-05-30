@@ -1,5 +1,5 @@
-﻿using System;
-using PKHeX.Core;
+﻿using PKHeX.Core;
+using System;
 
 namespace SysBot.Pokemon
 {
@@ -13,7 +13,7 @@ namespace SysBot.Pokemon
                 or PokeRoutineType.Dump
                 => new PokeTradeBotSV(Hub, cfg),
 
-            PokeRoutineType.RemoteControl => new RemoteControlBot(cfg),
+            PokeRoutineType.RemoteControl => new RemoteControlBotSV(cfg),
 
             _ => throw new ArgumentException(nameof(cfg.NextRoutineType)),
         };

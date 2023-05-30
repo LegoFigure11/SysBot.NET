@@ -1,9 +1,9 @@
-﻿using System;
-using Discord;
+﻿using Discord;
 using Discord.WebSocket;
 using PKHeX.Core;
-using System.Threading.Tasks;
 using SysBot.Base;
+using System;
+using System.Threading.Tasks;
 
 namespace SysBot.Pokemon.Discord
 {
@@ -25,7 +25,7 @@ namespace SysBot.Pokemon.Discord
                 var spec = GameInfo.Strings.Species[template.Species];
                 if (!la.Valid)
                 {
-                    var reason = result == "Timeout" ? $"That {spec} set took too long to generate." : $"I wasn't able to create a {spec} from that set.";
+                    var reason = result == "Timeout" ? $"That {spec} set took too long to generate." : result == "VersionMismatch" ? "Request refused: PKHeX and Auto-Legality Mod version mismatch." : $"I wasn't able to create a {spec} from that set.";
                     var imsg = $"Oops! {reason}";
                     if (result == "Failed")
                         imsg += $"\n{AutoLegalityWrapper.GetLegalizationHint(template, sav, pkm)}";

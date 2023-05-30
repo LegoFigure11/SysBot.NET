@@ -1,12 +1,14 @@
-﻿using System.Threading;
-using System.Threading.Tasks;
-using PKHeX.Core;
+﻿using PKHeX.Core;
 using SysBot.Base;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace SysBot.Pokemon
 {
     public abstract class PokeRoutineExecutorBase : SwitchRoutineExecutor<PokeBotState>
     {
+        public const decimal BotbaseVersion = 2.3m;
+
         protected PokeRoutineExecutorBase(IConsoleBotManaged<IConsoleConnection, IConsoleConnectionAsync> cfg) : base(cfg)
         {
         }
@@ -14,6 +16,10 @@ namespace SysBot.Pokemon
         public LanguageID GameLang { get; private set; }
         public GameVersion Version { get; private set; }
         public string InGameName { get; private set; } = "SysBot.NET";
+
+        public static readonly TrackedUserLog PreviousUsers = new();
+        public static readonly TrackedUserLog PreviousUsersDistribution = new();
+        public static readonly TrackedUserLog EncounteredUsers = new();
 
         public override string GetSummary()
         {

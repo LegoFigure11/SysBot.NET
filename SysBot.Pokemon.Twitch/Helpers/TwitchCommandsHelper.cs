@@ -1,6 +1,6 @@
-using System;
 using PKHeX.Core;
 using SysBot.Base;
+using System;
 
 namespace SysBot.Pokemon.Twitch
 {
@@ -61,9 +61,7 @@ namespace SysBot.Pokemon.Twitch
                 var reason = result == "Timeout" ? "Set took too long to generate." : "Unable to legalize the Pokémon.";
                 msg = $"Skipping trade, @{username}: {reason}";
             }
-#pragma warning disable CA1031 // Do not catch general exception types
             catch (Exception ex)
-#pragma warning restore CA1031 // Do not catch general exception types
             {
                 LogUtil.LogSafe(ex, nameof(TwitchCommandsHelper<T>));
                 msg = $"Skipping trade, @{username}: An unexpected problem occurred.";

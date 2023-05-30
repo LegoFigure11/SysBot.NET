@@ -1,9 +1,9 @@
 ﻿using Discord.Commands;
+using PKHeX.Core;
 using SysBot.Base;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using PKHeX.Core;
 
 namespace SysBot.Pokemon.Discord
 {
@@ -15,7 +15,7 @@ namespace SysBot.Pokemon.Discord
         [RequireRoleAccess(nameof(DiscordManager.RolesRemoteControl))]
         public async Task ClickAsync(SwitchButton b)
         {
-            var bot = SysCord<T>.Runner.Bots.Find(z => z.Bot is RemoteControlBot);
+            var bot = SysCord<T>.Runner.Bots.Find(z => IsRemoteControlBot(z.Bot));
             if (bot == null)
             {
                 await ReplyAsync($"No bot is available to execute your command: {b}").ConfigureAwait(false);
@@ -45,7 +45,7 @@ namespace SysBot.Pokemon.Discord
         [RequireRoleAccess(nameof(DiscordManager.RolesRemoteControl))]
         public async Task SetStickAsync(SwitchStick s, short x, short y, ushort ms = 1_000)
         {
-            var bot = SysCord<T>.Runner.Bots.Find(z => z.Bot is RemoteControlBot);
+            var bot = SysCord<T>.Runner.Bots.Find(z => IsRemoteControlBot(z.Bot));
             if (bot == null)
             {
                 await ReplyAsync($"No bot is available to execute your command: {s}").ConfigureAwait(false);
@@ -109,7 +109,7 @@ namespace SysBot.Pokemon.Discord
             return r.GetBot(ip) ?? r.Bots.Find(x => x.IsRunning); // safe fallback for users who mistype IP address for single bot instances
         }
 
-        private async Task ClickAsyncImpl(SwitchButton button,BotSource<PokeBotState> bot)
+        private async Task ClickAsyncImpl(SwitchButton button, BotSource<PokeBotState> bot)
         {
             if (!Enum.IsDefined(typeof(SwitchButton), button))
             {
@@ -123,7 +123,7 @@ namespace SysBot.Pokemon.Discord
             await ReplyAsync($"{b.Connection.Name} has performed: {button}").ConfigureAwait(false);
         }
 
-        private async Task SetStickAsyncImpl(SwitchStick s, short x, short y, ushort ms,BotSource<PokeBotState> bot)
+        private async Task SetStickAsyncImpl(SwitchStick s, short x, short y, ushort ms, BotSource<PokeBotState> bot)
         {
             if (!Enum.IsDefined(typeof(SwitchStick), s))
             {
@@ -139,5 +139,8 @@ namespace SysBot.Pokemon.Discord
             await b.Connection.SendAsync(SwitchCommand.ResetStick(s, crlf), CancellationToken.None).ConfigureAwait(false);
             await ReplyAsync($"{b.Connection.Name} has reset the stick position.").ConfigureAwait(false);
         }
+
+        private bool IsRemoteControlBot(RoutineExecutor<PokeBotState> botstate)
+            => botstate is RemoteControlBotSWSH or RemoteControlBotBS or RemoteControlBotLA or RemoteControlBotSV;
     }
 }

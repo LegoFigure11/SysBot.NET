@@ -1,7 +1,7 @@
-﻿using System.IO;
-using NLog;
+﻿using NLog;
 using NLog.Config;
 using NLog.Targets;
+using System.IO;
 
 namespace SysBot.Base
 {
@@ -29,7 +29,7 @@ namespace SysBot.Base
         }
 
         // ReSharper disable once StaticMemberInGenericType
-        private static readonly ILogger Logger = new LogFactory(GetConfig()).GetCurrentClassLogger();
+        private static readonly ILogger Logger = new LogFactory { Configuration = GetConfig() }.GetCurrentClassLogger();
         public static void Record(string message) => Logger.Log(LogLevel.Info, message);
     }
 }

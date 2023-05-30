@@ -1,11 +1,11 @@
-﻿using Discord.Commands;
+﻿using Discord;
+using Discord.Commands;
 using Discord.WebSocket;
 using SysBot.Base;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Discord;
 
 namespace SysBot.Pokemon.Discord
 {
@@ -59,9 +59,7 @@ namespace SysBot.Pokemon.Discord
                 {
                     c.SendMessageAsync(GetMessage(msg, identity));
                 }
-#pragma warning disable CA1031 // Do not catch general exception types
                 catch (Exception ex)
-#pragma warning restore CA1031 // Do not catch general exception types
                 {
                     LogUtil.LogSafe(ex, identity);
                 }
