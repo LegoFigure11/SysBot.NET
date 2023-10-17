@@ -282,7 +282,8 @@ namespace SysBot.Pokemon
             LastTradeDistributionFixed = poke.Type == PokeTradeType.Random && !Hub.Config.Distribution.RandomCode;
 
             // Search for a trade partner for a Link Trade.
-            await Click(A, 1_000, token).ConfigureAwait(false);
+            await Click(A, 0_500, token).ConfigureAwait(false);
+            await Click(A, 0_500, token).ConfigureAwait(false);
 
             // Clear it so we can detect it loading.
             await ClearTradePartnerNID(TradePartnerNIDOffset, token).ConfigureAwait(false);
@@ -338,7 +339,7 @@ namespace SysBot.Pokemon
             RecordUtil<PokeTradeBotSWSH>.Record($"Initiating\t{trainerNID:X16}\t{tradePartner.TrainerName}\t{poke.Trainer.TrainerName}\t{poke.Trainer.ID}\t{poke.ID}\t{toSend.EncryptionConstant:X8}");
             Log($"Found Link Trade partner: {tradePartner.TrainerName}-{tradePartner.TID7} (ID: {trainerNID})");
 
-            var partnerCheck = await CheckPartnerReputation(this, poke, trainerNID, tradePartner.TrainerName, AbuseSettings, PreviousUsers, PreviousUsersDistribution, EncounteredUsers, token);
+            var partnerCheck = await CheckPartnerReputation(this, poke, trainerNID, tradePartner.TrainerName, AbuseSettings, token);
             if (partnerCheck != PokeTradeResult.Success)
             {
                 await Click(A, 1_000, token).ConfigureAwait(false); // Ensures we dismiss a popup.
@@ -416,6 +417,9 @@ namespace SysBot.Pokemon
             // Only log if we completed the trade.
             UpdateCountsAndExport(poke, received, toSend);
 
+            // Log for Trade Abuse tracking.
+            LogSuccessfulTrades(poke, trainerNID, tradePartner.TrainerName);
+
             // Sometimes they offered another mon, so store that immediately upon leaving Union Room.
             lastOffered = await SwitchConnection.ReadBytesAbsoluteAsync(TradePartnerOfferedOffset, 8, token).ConfigureAwait(false);
 
@@ -452,6 +456,11 @@ namespace SysBot.Pokemon
             {
                 if (await IsUserBeingShifty(detail, token).ConfigureAwait(false))
                     return PokeTradeResult.SuspiciousActivity;
+
+                // We can fall out of the box if the user offers, then quits.
+                if (!await IsInBox(PortalOffset, token).ConfigureAwait(false))
+                    return PokeTradeResult.TrainerLeft;
+
                 await Click(A, 1_000, token).ConfigureAwait(false);
 
                 // EC is detectable at the start of the animation.
@@ -504,17 +513,16 @@ namespace SysBot.Pokemon
                 if (attempts >= 30)
                     break;
 
-                await Click(B, 1_300, token).ConfigureAwait(false);
+                await Click(B, 1_000, token).ConfigureAwait(false);
                 if (await IsOnOverworld(OverworldOffset, token).ConfigureAwait(false))
                     break;
 
-                await Click(B, 2_000, token).ConfigureAwait(false);
+                await Click(B, 1_000, token).ConfigureAwait(false);
                 if (await IsOnOverworld(OverworldOffset, token).ConfigureAwait(false))
                     break;
 
-                await Click(A, 1_300, token).ConfigureAwait(false);
-                if (await IsOnOverworld(OverworldOffset, token).ConfigureAwait(false))
-                    break;
+                if (await IsInBox(PortalOffset, token).ConfigureAwait(false))
+                    await Click(A, 1_000, token).ConfigureAwait(false);
             }
 
             // We didn't make it for some reason.
@@ -540,7 +548,7 @@ namespace SysBot.Pokemon
             var attempts = 0;
             while (await IsInPokePortal(PortalOffset, token).ConfigureAwait(false))
             {
-                await Click(B, 1_500, token).ConfigureAwait(false);
+                await Click(B, 2_500, token).ConfigureAwait(false);
                 if (++attempts >= 30)
                 {
                     Log("Failed to recover to Poké Portal.");
@@ -648,6 +656,7 @@ namespace SysBot.Pokemon
 
         private async Task ExitTradeToPortal(bool unexpected, CancellationToken token)
         {
+            await Task.Delay(1_000, token).ConfigureAwait(false);
             if (await IsInPokePortal(PortalOffset, token).ConfigureAwait(false))
                 return;
 
@@ -663,21 +672,21 @@ namespace SysBot.Pokemon
                 await Click(B, 1_000, token).ConfigureAwait(false);
                 if (!await IsInBox(PortalOffset, token).ConfigureAwait(false))
                 {
-                    await Task.Delay(5_000, token).ConfigureAwait(false);
+                    await Task.Delay(1_000, token).ConfigureAwait(false);
                     break;
                 }
 
                 await Click(A, 1_000, token).ConfigureAwait(false);
                 if (!await IsInBox(PortalOffset, token).ConfigureAwait(false))
                 {
-                    await Task.Delay(5_000, token).ConfigureAwait(false);
+                    await Task.Delay(1_000, token).ConfigureAwait(false);
                     break;
                 }
 
                 await Click(B, 1_000, token).ConfigureAwait(false);
                 if (!await IsInBox(PortalOffset, token).ConfigureAwait(false))
                 {
-                    await Task.Delay(5_000, token).ConfigureAwait(false);
+                    await Task.Delay(1_000, token).ConfigureAwait(false);
                     break;
                 }
 
@@ -711,7 +720,6 @@ namespace SysBot.Pokemon
                     return;
                 }
             }
-            await Task.Delay(2_000, token).ConfigureAwait(false);
         }
 
         // These don't change per session and we access them frequently, so set these each time we start.
@@ -945,6 +953,5 @@ namespace SysBot.Pokemon
                 Log($"Left the Barrier. Count: {Hub.BotSync.Barrier.ParticipantCount}");
             }
         }
-
     }
 }
