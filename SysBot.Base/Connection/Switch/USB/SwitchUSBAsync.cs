@@ -26,7 +26,7 @@ namespace SysBot.Base
             return Task.Run(() => Send(data), token);
         }
 
-        public Task<byte[]> ReadBytesAsync(uint offset, int length, CancellationToken token) => Task.Run(() => Read(offset, length, Heap.GetReadMethod(false)), token);
+        public Task<byte[]> ReadBytesAsync(ulong offset, int length, CancellationToken token) => Task.Run(() => Read(offset, length, Heap.GetReadMethod(false)), token);
         public Task<byte[]> ReadBytesMainAsync(ulong offset, int length, CancellationToken token) => Task.Run(() => Read(offset, length, Main.GetReadMethod(false)), token);
         public Task<byte[]> ReadBytesAbsoluteAsync(ulong offset, int length, CancellationToken token) => Task.Run(() => Read(offset, length, Absolute.GetReadMethod(false)), token);
 
@@ -34,7 +34,7 @@ namespace SysBot.Base
         public Task<byte[]> ReadBytesMainMultiAsync(IReadOnlyDictionary<ulong, int> offsetSizes, CancellationToken token) => Task.Run(() => ReadMulti(offsetSizes, Main.GetReadMultiMethod(false)), token);
         public Task<byte[]> ReadBytesAbsoluteMultiAsync(IReadOnlyDictionary<ulong, int> offsetSizes, CancellationToken token) => Task.Run(() => ReadMulti(offsetSizes, Absolute.GetReadMultiMethod(false)), token);
 
-        public Task WriteBytesAsync(byte[] data, uint offset, CancellationToken token) => Task.Run(() => Write(data, offset, Heap.GetWriteMethod(false)), token);
+        public Task WriteBytesAsync(byte[] data, ulong offset, CancellationToken token) => Task.Run(() => Write(data, offset, Heap.GetWriteMethod(false)), token);
         public Task WriteBytesMainAsync(byte[] data, ulong offset, CancellationToken token) => Task.Run(() => Write(data, offset, Main.GetWriteMethod(false)), token);
         public Task WriteBytesAbsoluteAsync(byte[] data, ulong offset, CancellationToken token) => Task.Run(() => Write(data, offset, Absolute.GetWriteMethod(false)), token);
 
@@ -143,6 +143,65 @@ namespace SysBot.Base
                 Send(SwitchCommand.PointerRelative(jumps, false));
                 byte[] baseBytes = ReadBulkUSB();
                 return BitConverter.ToUInt64(baseBytes, 0);
+            }, token);
+        }
+
+        public Task<byte[]> PixelPeek(CancellationToken token)
+        {
+            return Task.Run(() =>
+            {
+                Send(SwitchCommand.PixelPeek(false));
+                return PixelPeekUSB();
+            }, token);
+        }
+
+        public Task<long> GetUnixTime(CancellationToken token)
+        {
+            return Task.Run(() =>
+            {
+                Send(SwitchCommand.GetUnixTime(false));
+                byte[] baseBytes = ReadBulkUSB();
+                return BitConverter.ToInt64(baseBytes, 0);
+            }, token);
+        }
+
+        public Task TimeSkipForward(CancellationToken token)
+        {
+            return Task.Run(() =>
+            {
+                Send(SwitchCommand.TimeSkipForward(false));
+            }, token);
+        }
+
+        public Task ResetTime(CancellationToken token)
+        {
+            return Task.Run(() =>
+            {
+                Send(SwitchCommand.ResetTime(false));
+            }, token);
+        }
+
+        public Task DaySkip(CancellationToken token)
+        {
+            return Task.Run(() =>
+            {
+                Send(SwitchCommand.DaySkip(false));
+            }, token);
+        }
+
+        public Task DaySkipBack(CancellationToken token)
+        {
+            return Task.Run(() =>
+            {
+                Send(SwitchCommand.DaySkipBack(false));
+            }, token);
+        }
+
+        public Task ResetTimeNTP(CancellationToken token)
+        {
+            return Task.Run(() =>
+            {
+                Send(SwitchCommand.ResetTimeNTP(false));
             }, token);
         }
     }

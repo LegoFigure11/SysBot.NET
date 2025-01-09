@@ -97,7 +97,7 @@ namespace SysBot.Base
             return Decoder.ConvertHexByteStringToBytes(buffer);
         }
 
-        public async Task<byte[]> ReadBytesAsync(uint offset, int length, CancellationToken token) => await Read(offset, length, Heap, token).ConfigureAwait(false);
+        public async Task<byte[]> ReadBytesAsync(ulong offset, int length, CancellationToken token) => await Read(offset, length, Heap, token).ConfigureAwait(false);
         public async Task<byte[]> ReadBytesMainAsync(ulong offset, int length, CancellationToken token) => await Read(offset, length, Main, token).ConfigureAwait(false);
         public async Task<byte[]> ReadBytesAbsoluteAsync(ulong offset, int length, CancellationToken token) => await Read(offset, length, Absolute, token).ConfigureAwait(false);
 
@@ -105,9 +105,70 @@ namespace SysBot.Base
         public async Task<byte[]> ReadBytesMainMultiAsync(IReadOnlyDictionary<ulong, int> offsetSizes, CancellationToken token) => await ReadMulti(offsetSizes, Main, token).ConfigureAwait(false);
         public async Task<byte[]> ReadBytesAbsoluteMultiAsync(IReadOnlyDictionary<ulong, int> offsetSizes, CancellationToken token) => await ReadMulti(offsetSizes, Absolute, token).ConfigureAwait(false);
 
-        public async Task WriteBytesAsync(byte[] data, uint offset, CancellationToken token) => await Write(data, offset, Heap, token).ConfigureAwait(false);
+        public async Task TimeSkipForward(CancellationToken token) => await SendAsync(SwitchCommand.TimeSkipForward(), token);
+        public async Task ResetTime(CancellationToken token) => await SendAsync(SwitchCommand.ResetTime(), token);
+
+        public async Task DaySkip(CancellationToken token) => await SendAsync(SwitchCommand.DaySkip(), token);
+        public async Task DaySkipBack(CancellationToken token) => await SendAsync(SwitchCommand.DaySkipBack(), token);
+        public async Task ResetTimeNTP(CancellationToken token) => await SendAsync(SwitchCommand.ResetTimeNTP(), token);
+
+        public async Task WriteBytesAsync(byte[] data, ulong offset, CancellationToken token) => await Write(data, offset, Heap, token).ConfigureAwait(false);
         public async Task WriteBytesMainAsync(byte[] data, ulong offset, CancellationToken token) => await Write(data, offset, Main, token).ConfigureAwait(false);
         public async Task WriteBytesAbsoluteAsync(byte[] data, ulong offset, CancellationToken token) => await Write(data, offset, Absolute, token).ConfigureAwait(false);
+
+        public async Task<byte[]> PixelPeek(CancellationToken token)
+        {
+            await SendAsync(SwitchCommand.PixelPeek(), token).ConfigureAwait(false);
+            await Task.Delay(Connection.ReceiveBufferSize / DelayFactor + BaseDelay, token).ConfigureAwait(false);
+
+            var data = await FlexRead(token).ConfigureAwait(false);
+            var result = Array.Empty<byte>();
+            try
+            {
+                result = Decoder.ConvertHexByteStringToBytes(data);
+            }
+            catch (Exception e)
+            {
+                LogError($"Malformed screenshot data received:\n{e.Message}");
+            }
+
+            return result;
+        }
+
+        private async Task<byte[]> FlexRead(CancellationToken token)
+        {
+            List<byte> flexBuffer = new();
+            int available = Connection.Available;
+            Connection.ReceiveTimeout = 1_000;
+
+            do
+            {
+                byte[] buffer = new byte[available];
+                try
+                {
+                    Connection.Receive(buffer, available, SocketFlags.None);
+                    flexBuffer.AddRange(buffer);
+                }
+                catch (Exception ex)
+                {
+                    LogError($"Socket exception thrown while receiving data:\n{ex.Message}");
+                    return Array.Empty<byte>();
+                }
+
+                await Task.Delay(MaximumTransferSize / DelayFactor + BaseDelay, token).ConfigureAwait(false);
+                available = Connection.Available;
+            } while (flexBuffer.Count == 0 || flexBuffer.Last() != (byte)'\n');
+
+            Connection.ReceiveTimeout = 0;
+            return flexBuffer.ToArray();
+        }
+
+        public async Task<long> GetUnixTime(CancellationToken token)
+        {
+            var result = await ReadBytesFromCmdAsync(SwitchCommand.GetUnixTime(), 8, token).ConfigureAwait(false);
+            Array.Reverse(result);
+            return BitConverter.ToInt64(result, 0);
+        }
 
         public async Task<ulong> GetMainNsoBaseAsync(CancellationToken token)
         {
@@ -126,26 +187,26 @@ namespace SysBot.Base
         public async Task<string> GetTitleID(CancellationToken token)
         {
             var bytes = await ReadRaw(SwitchCommand.GetTitleID(), 17, token).ConfigureAwait(false);
-            return Encoding.ASCII.GetString(bytes).Trim();
+            return Encoding.UTF8.GetString(bytes).Trim();
         }
 
         public async Task<string> GetBotbaseVersion(CancellationToken token)
         {
             // Allows up to 9 characters for version, and trims extra '\0' if unused.
             var bytes = await ReadRaw(SwitchCommand.GetBotbaseVersion(), 10, token).ConfigureAwait(false);
-            return Encoding.ASCII.GetString(bytes).Trim('\0');
+            return Encoding.UTF8.GetString(bytes).Trim('\0');
         }
 
         public async Task<string> GetGameInfo(string info, CancellationToken token)
         {
-            var bytes = await ReadRaw(SwitchCommand.GetGameInfo(info), 17, token).ConfigureAwait(false);
-            return Encoding.ASCII.GetString(bytes).Trim(new char[] { '\0', '\n' });
+            var bytes = await ReadRaw(SwitchCommand.GetGameInfo(info), 30, token).ConfigureAwait(false);
+            return Encoding.UTF8.GetString(bytes).Trim(new char[] { '\0', '\n' });
         }
 
         public async Task<bool> IsProgramRunning(ulong pid, CancellationToken token)
         {
             var bytes = await ReadRaw(SwitchCommand.IsProgramRunning(pid), 17, token).ConfigureAwait(false);
-            return ulong.TryParse(Encoding.ASCII.GetString(bytes).Trim(), out var value) && value == 1;
+            return ulong.TryParse(Encoding.UTF8.GetString(bytes).Trim(), out var value) && value == 1;
         }
 
         private async Task<byte[]> Read(ulong offset, int length, SwitchOffsetType type, CancellationToken token)
