@@ -302,8 +302,8 @@ namespace SysBot.Base
         public static byte[] GetUnixTime(bool crlf = true) => Encode("getUnixTime", crlf);
         public static byte[] TimeSkipForward(bool crlf = true) => Encode("timeSkipForward", crlf);
         public static byte[] PixelPeek(bool crlf = true) => Encode("pixelPeek", crlf);
-        public static byte[] DaySkip(bool crlf = true) => Encode("dateSkip", crlf);
-        public static byte[] DaySkipBack(bool crlf = true) => Encode("dateSkipBack", crlf);
+        public static byte[] DaySkip(bool crlf = true) => Encode("daySkip", crlf);
+        public static byte[] DaySkipBack(bool crlf = true) => Encode("daySkipBack", crlf);
         public static byte[] ResetTimeNTP(bool crlf = true) => Encode("resetTimeNTP", crlf);
     }
 }
